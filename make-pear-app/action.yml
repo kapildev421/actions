@@ -127,7 +127,29 @@ runs:
       env:
         NODE_AUTH_TOKEN: ${{ github.token }}
       run: |
-        npm install --foreground-scripts --loglevel=silly --timing --verbose
+        $args = @(
+          "install",
+          "--foreground-scripts",
+          "--loglevel=silly",
+          "--timing",
+          "--verbose",
+          "--no-audit",
+          "--no-fund"
+        )
+
+        Write-Host "Running: npm $($args -join ' ')"
+        $proc = Start-Process -FilePath "npm" -ArgumentList $args -NoNewWindow -PassThru
+
+        while (-not $proc.HasExited) {
+          Write-Host "npm install still running... $(Get-Date -Format o)"
+          Start-Sleep -Seconds 30
+          $proc.Refresh()
+        }
+
+        if ($proc.ExitCode -ne 0) {
+          Write-Error "npm install failed with exit code $($proc.ExitCode)"
+          exit $proc.ExitCode
+        }
       shell: pwsh
     - name: 'Install the Apple certificate and notarytool credentials'
       id: keychain_notary_setup
