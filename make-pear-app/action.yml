@@ -129,6 +129,7 @@ runs:
       run: |
         $args = @(
           "install",
+          "--legacy-peer-deps",
           "--foreground-scripts",
           "--loglevel=silly",
           "--timing",
