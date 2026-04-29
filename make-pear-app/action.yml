@@ -113,7 +113,7 @@ runs:
       shell: pwsh
     - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
       with:
-        node-version: 20
+        node-version: 22
         registry-url: 'https://npm.pkg.github.com'
     - name: 'Install dependencies (Linux/macOS)'
       if: ${{ runner.os != 'Windows' }}
@@ -127,7 +127,7 @@ runs:
       env:
         NODE_AUTH_TOKEN: ${{ github.token }}
       run: |
-        npm install
+        npm install --foreground-scripts --loglevel=silly --timing --verbose
       shell: pwsh
     - name: 'Install the Apple certificate and notarytool credentials'
       id: keychain_notary_setup
