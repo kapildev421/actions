@@ -137,8 +137,8 @@ runs:
           "--no-fund"
         )
 
-        Write-Host "Running: npm $($args -join ' ')"
-        $proc = Start-Process -FilePath "npm" -ArgumentList $args -NoNewWindow -PassThru
+        Write-Host "Running: npm.cmd $($args -join ' ')"
+        $proc = Start-Process -FilePath "npm.cmd" -ArgumentList $args -NoNewWindow -PassThru
 
         while (-not $proc.HasExited) {
           Write-Host "npm install still running... $(Get-Date -Format o)"
