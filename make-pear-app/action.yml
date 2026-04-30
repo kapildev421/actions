@@ -49,10 +49,6 @@ inputs:
     description: 'UUID that identifies the API key issuer'
     required: false
     default: ''
-  windows_cert_sha1:
-    description: 'SHA1 thumbprint of the Windows cert'
-    required: false
-    default: ''
 
 outputs:
   artifact-links:
@@ -101,19 +97,9 @@ runs:
           exit 1
         fi
       shell: bash
-    - name: 'Validate Windows inputs'
-      if: ${{ runner.os == 'Windows' }}
-      run: |
-        $missing = @()
-        if ([string]::IsNullOrEmpty('${{ inputs.windows_cert_sha1 }}')) { $missing += "windows_cert_sha1" }
-        if ($missing.Count -gt 0) {
-          Write-Error "Error: Missing Windows inputs: $($missing -join ', ')"
-          exit 1
-        }
-      shell: pwsh
     - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
       with:
-        node-version: 22
+        node-version: 20
         registry-url: 'https://npm.pkg.github.com'
     - name: 'Install dependencies (Linux/macOS)'
       if: ${{ runner.os != 'Windows' }}
@@ -127,30 +113,7 @@ runs:
       env:
         NODE_AUTH_TOKEN: ${{ github.token }}
       run: |
-        $args = @(
-          "install",
-          "--legacy-peer-deps",
-          "--foreground-scripts",
-          "--loglevel=silly",
-          "--timing",
-          "--verbose",
-          "--no-audit",
-          "--no-fund"
-        )
-
-        Write-Host "Running: npm.cmd $($args -join ' ')"
-        $proc = Start-Process -FilePath "npm.cmd" -ArgumentList $args -NoNewWindow -PassThru
-
-        while (-not $proc.HasExited) {
-          Write-Host "npm install still running... $(Get-Date -Format o)"
-          Start-Sleep -Seconds 30
-          $proc.Refresh()
-        }
-
-        if ($proc.ExitCode -ne 0) {
-          Write-Error "npm install failed with exit code $($proc.ExitCode)"
-          exit $proc.ExitCode
-        }
+        npm install
       shell: pwsh
     - name: 'Install the Apple certificate and notarytool credentials'
       id: keychain_notary_setup
@@ -195,16 +158,6 @@ runs:
 
         echo "KEYCHAIN_PROFILE=$KEYCHAIN_PROFILE" >> $GITHUB_OUTPUT
       shell: bash
-    - name: 'Set up Snapcraft'
-      if: ${{ runner.os == 'Linux' }}
-      run: |
-        sudo snap install snapcraft --classic
-        sudo snap install lxd
-        sudo usermod -a -G lxd $USER
-        groups $USER
-        sudo iptables -P FORWARD ACCEPT
-        sudo lxd init --auto
-      shell: bash
     - name: 'Build application (Linux)'
       if: ${{ runner.os == 'Linux' }}
       env:
@@ -233,8 +186,6 @@ runs:
         NODE_AUTH_TOKEN: ${{ github.token }}
         CHANNEL: "${{ inputs.channel }}"
         UPGRADE_KEY: "${{ inputs.upgrade_key != '' && inputs.upgrade_key || null }}"
-        WINDOWS_CERT_SHA1: "${{ inputs.windows_cert_sha1 }}"
-        WINDOWS_SIGN_HOOK: ${{ github.action_path }}/windows-sign.js
         NODE_ENV: production
       run: |
         npm run make
