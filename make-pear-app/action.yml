@@ -126,29 +126,73 @@ runs:
       if: ${{ runner.os == 'Windows' }}
       env:
         NODE_AUTH_TOKEN: ${{ github.token }}
+        HUSKY: '0'
       run: |
         $args = @(
-          "install",
+          "ci",
           "--legacy-peer-deps",
           "--foreground-scripts",
           "--loglevel=silly",
           "--timing",
-          "--verbose",
           "--no-audit",
           "--no-fund"
         )
-
         Write-Host "Running: npm.cmd $($args -join ' ')"
-        $proc = Start-Process -FilePath "npm.cmd" -ArgumentList $args -NoNewWindow -PassThru
+
+        $stdoutLog = Join-Path $env:RUNNER_TEMP "npm-ci-stdout.log"
+        $stderrLog = Join-Path $env:RUNNER_TEMP "npm-ci-stderr.log"
+
+        $proc = Start-Process -FilePath "npm.cmd" `
+          -ArgumentList $args `
+          -NoNewWindow `
+          -PassThru `
+          -RedirectStandardOutput $stdoutLog `
+          -RedirectStandardError  $stderrLog
+
+        $maxMinutes  = 15
+        $deadline    = (Get-Date).AddMinutes($maxMinutes)
+        $lastSize    = 0
+        $stallCount  = 0
 
         while (-not $proc.HasExited) {
-          Write-Host "npm install still running... $(Get-Date -Format o)"
           Start-Sleep -Seconds 30
           $proc.Refresh()
+
+          if (Test-Path $stdoutLog) {
+            $size = (Get-Item $stdoutLog).Length
+            $tail = Get-Content $stdoutLog -Tail 3 -ErrorAction SilentlyContinue
+            Write-Host "npm ci running... $(Get-Date -Format o)  [stdout=$size bytes]"
+            if ($tail) { $tail | ForEach-Object { Write-Host "  | $_" } }
+
+            if ($size -eq $lastSize) {
+              $stallCount++
+            } else {
+              $stallCount = 0
+              $lastSize   = $size
+            }
+            if ($stallCount -ge 10) {
+              Write-Error "npm ci appears stalled (no output for 5 minutes). Killing."
+              Stop-Process -Id $proc.Id -Force
+              Get-Process node,git,husky -ErrorAction SilentlyContinue | Stop-Process -Force
+              break
+            }
+          }
+
+          if ((Get-Date) -gt $deadline) {
+            Write-Error "npm ci exceeded $maxMinutes minutes. Killing."
+            Stop-Process -Id $proc.Id -Force
+            Get-Process node,git,husky -ErrorAction SilentlyContinue | Stop-Process -Force
+            break
+          }
         }
 
+        Write-Host "===== npm ci stdout ====="
+        if (Test-Path $stdoutLog) { Get-Content $stdoutLog }
+        Write-Host "===== npm ci stderr ====="
+        if (Test-Path $stderrLog) { Get-Content $stderrLog }
+
         if ($proc.ExitCode -ne 0) {
-          Write-Error "npm install failed with exit code $($proc.ExitCode)"
+          Write-Error "npm ci failed with exit code $($proc.ExitCode)"
           exit $proc.ExitCode
         }
       shell: pwsh
